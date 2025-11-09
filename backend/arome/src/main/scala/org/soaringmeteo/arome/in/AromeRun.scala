@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory
 /**
  * Metadata about a run of AROME HD 0.01°
  *
- * AROME runs 8 times per day: 00Z, 03Z, 06Z, 09Z, 12Z, 15Z, 18Z, 21Z
+ * AROME runs hourly from 06Z to 21Z (16 runs per day)
  */
 case class AromeRun(
   initDateTime: OffsetDateTime
@@ -17,8 +17,8 @@ case class AromeRun(
   // Format: "2025-11-09T12:00:00Z"
   private val initTimeString = initDateTime.toString
 
-  // Run number mapping (00Z=001, 03Z=002, ..., 21Z=008)
-  private val runNumber = f"${(initDateTime.getHour / 3) + 1}%03d"
+  // Run number mapping for hourly runs (06Z=006, 07Z=007, ..., 21Z=021)
+  private val runNumber = f"${initDateTime.getHour}%03d"
 
   /**
    * Storage path for downloaded GRIB files
@@ -83,10 +83,10 @@ object AromeRun {
   /**
    * Find the latest available AROME run
    *
-   * AROME runs every 3 hours: 00Z, 03Z, 06Z, 09Z, 12Z, 15Z, 18Z, 21Z
+   * AROME runs hourly from 06Z to 21Z (16 runs per day)
    * Files are typically available 1-2 hours after run initialization
    *
-   * @param maybeAromeRunInitTime Optional specific init time ("00", "03", "06", "09", "12", "15", "18", "21")
+   * @param maybeAromeRunInitTime Optional specific init time ("06", "07", ..., "21")
    * @return AromeRun metadata
    */
   def findLatest(maybeAromeRunInitTime: Option[String] = None): AromeRun = {
@@ -95,22 +95,33 @@ object AromeRun {
     val initHour = maybeAromeRunInitTime match {
       case Some(timeString) =>
         val hour = timeString.toInt
-        require(hour % 3 == 0 && hour >= 0 && hour < 24, s"Invalid AROME run time: $timeString. Must be 00, 03, 06, 09, 12, 15, 18, or 21")
+        require(hour >= 6 && hour <= 21, s"Invalid AROME run time: $timeString. Must be between 06 and 21 (hourly)")
         hour
 
       case None =>
-        // Find most recent 3-hour interval, minus 2 hours to ensure data availability
+        // Find most recent hourly run between 06Z and 21Z, minus 2 hours to ensure data availability
         val hoursAgo = 2
         val effectiveTime = now.minusHours(hoursAgo)
-        val latestRunHour = (effectiveTime.getHour / 3) * 3
+        val effectiveHour = effectiveTime.getHour
+
+        // Clamp to 06-21 range
+        val latestRunHour = if (effectiveHour < 6) {
+          21 // Use 21Z from previous day
+        } else if (effectiveHour > 21) {
+          21 // Use 21Z from today
+        } else {
+          effectiveHour // Use the hour itself (06-21)
+        }
         latestRunHour
     }
 
     val runDate = maybeAromeRunInitTime match {
       case Some(_) => now.toLocalDate
       case None =>
-        // If latest run hour is later than current hour - 2, use previous day
-        if (initHour > now.minusHours(2).getHour) {
+        // If latest run hour is 21 and current time is before 23Z, use today
+        // Otherwise, if we're before 06Z, use previous day's 21Z run
+        val effectiveTime = now.minusHours(2)
+        if (effectiveTime.getHour < 6) {
           now.toLocalDate.minusDays(1)
         } else {
           now.toLocalDate
@@ -130,9 +141,11 @@ object AromeRun {
 
   /**
    * Create AromeRun for a specific date and time
+   *
+   * @param hour Must be between 6 and 21 (hourly runs)
    */
   def apply(year: Int, month: Int, day: Int, hour: Int): AromeRun = {
-    require(hour % 3 == 0 && hour >= 0 && hour < 24, s"Invalid AROME run hour: $hour")
+    require(hour >= 6 && hour <= 21, s"Invalid AROME run hour: $hour. Must be between 06 and 21 (hourly)")
 
     val initDateTime = OffsetDateTime.of(
       LocalDate.of(year, month, day),

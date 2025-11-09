@@ -9,7 +9,7 @@
 - **Grid**: EURW1S100 (55.4°N - 37.5°N, 12°W - 16°E)
 - **Resolution**: 0.01° (~1.1 km)
 - **Format**: GRIB2
-- **Update frequency**: 8 runs per day (every 3 hours: 00Z, 03Z, 06Z, 09Z, 12Z, 15Z, 18Z, 21Z)
+- **Update frequency**: 16 runs per day (hourly: 06Z to 21Z)
 - **Forecast horizon**: 0-24 hours (hourly)
 
 ## URL Pattern
@@ -20,12 +20,12 @@ https://object.files.data.gouv.fr/meteofrance-pnt/pnt/{run_time}/arome/{run_numb
 
 **Example**:
 ```
-https://object.files.data.gouv.fr/meteofrance-pnt/pnt/2025-11-09T12:00:00Z/arome/005/HP1/arome__005__HP1__00H__2025-11-09T12:00:00Z.grib2
+https://object.files.data.gouv.fr/meteofrance-pnt/pnt/2025-11-09T12:00:00Z/arome/012/HP1/arome__012__HP1__00H__2025-11-09T12:00:00Z.grib2
 ```
 
 **Parameters**:
 - `run_time`: ISO 8601 format (e.g., `2025-11-09T12:00:00Z`)
-- `run_number`: `001` (00Z), `002` (03Z), ..., `008` (21Z)
+- `run_number`: Hourly runs from `006` (06Z) to `021` (21Z)
 - `package`: `SP1`, `HP1`, `HP2`, or `HP3`
 - `hour`: `00H` to `24H` (forecast hour offset)
 
