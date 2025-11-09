@@ -71,7 +71,7 @@ sbt
 	
 `makeGfsAssets` downloads a subset of the usual data to speed up the development workflow.
 
-You can customize the settings by changing the configuration file [pyrenees.conf](backend/gfs/pyrenees.conf). Look at the file [reference.conf](backend/gfs/src/main/resources/reference.conf) for an overview of all the configuration options.
+You can customize the settings by changing the configuration. The file [dev.conf](backend/gfs/dev.conf) is a symlink that points to the active configuration (currently [pyrenees.conf](backend/gfs/pyrenees.conf)). To use a different configuration, either modify `pyrenees.conf` or create a new config file and update the symlink. Look at the file [reference.conf](backend/gfs/src/main/resources/reference.conf) for an overview of all the configuration options.
 
 The different backend options are documented [here](backend/README.md)
 

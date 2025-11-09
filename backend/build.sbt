@@ -134,7 +134,7 @@ InputKey[Unit]("makeGfsAssets") := Def.inputTaskDyn {
   )
   val args =
     maybeGfsRunInitTime.fold(requiredArgs)(t => s"-t ${t}" :: requiredArgs)
-  (gfs / Compile / runMain).toTask(s" -Dconfig.file=gfs/pyrenees.conf org.soaringmeteo.gfs.Main ${args.mkString(" ")}")
+  (gfs / Compile / runMain).toTask(s" -Dconfig.file=gfs/dev.conf org.soaringmeteo.gfs.Main ${args.mkString(" ")}")
 }.evaluated
 
 TaskKey[Unit]("makeWrfAssets") := Def.taskDyn {
