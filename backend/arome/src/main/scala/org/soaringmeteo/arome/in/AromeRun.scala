@@ -4,21 +4,18 @@ import java.time.{LocalDate, LocalTime, OffsetDateTime, ZoneOffset}
 import org.slf4j.LoggerFactory
 
 /**
- * Metadata about a run of AROME HD 0.01°
+ * Metadata about a run of AROME France HD (1.3km)
  *
  * AROME runs hourly from 06Z to 21Z (16 runs per day)
+ *
+ * Data source: https://object.data.gouv.fr/meteofrance-pnt/pnt/
+ * URL format: YYYYMMDD/arome/{HH}H/SP1_arome-france-hd_{HH}H_YYYYMMDDHH.grib2
  */
 case class AromeRun(
   initDateTime: OffsetDateTime
 ) {
 
   private val logger = LoggerFactory.getLogger(getClass)
-
-  // Format: "2025-11-09T12:00:00Z"
-  private val initTimeString = initDateTime.toString
-
-  // Run number mapping for hourly runs (06Z=006, 07Z=007, ..., 21Z=021)
-  private val runNumber = f"${initDateTime.getHour}%03d"
 
   /**
    * Storage path for downloaded GRIB files
@@ -33,44 +30,54 @@ case class AromeRun(
 
   /**
    * Filename for a specific package and hour offset
-   * @param packageName SP1, HP1, HP2, or HP3
-   * @param hourOffset Hour offset from run initialization (0-24)
-   * @return Filename like: arome__005__HP1__12H__2025-11-09T12:00:00Z.grib2
+   *
+   * Format: {package}_arome-france-hd_{run}H_{YYYYMMDDHH}.grib2
+   *
+   * @param packageName SP1, SP2, SP3, or HP1
+   * @param hourOffset Hour offset from run initialization (0-24) - currently unused, same file for all hours
+   * @return Filename like: SP1_arome-france-hd_12H_2025110912.grib2
    */
-  def fileName(packageName: String, hourOffset: Int): String = {
-    val hourString = f"${hourOffset}%02dH"
-    s"arome__${runNumber}__${packageName}__${hourString}__${initTimeString}.grib2"
+  def fileName(packageName: String, hourOffset: Int = 0): String = {
+    val dateTimeString = f"${initDateTime.getYear}%04d${initDateTime.getMonthValue}%02d${initDateTime.getDayOfMonth}%02d${initDateTime.getHour}%02d"
+    val runHour = f"${initDateTime.getHour}%02dH"
+    s"${packageName}_arome-france-hd_${runHour}_${dateTimeString}.grib2"
   }
 
   /**
    * Full URL to download a GRIB2 file from data.gouv.fr
    *
    * URL pattern:
-   * https://object.files.data.gouv.fr/meteofrance-pnt/pnt/{run_time}/arome/{run_number}/{package}/arome__{run_number}__{package}__{hour}H__{run_time}.grib2
+   * https://object.data.gouv.fr/meteofrance-pnt/pnt/YYYYMMDD/arome/{run}H/{package}_arome-france-hd_{run}H_YYYYMMDDHH.grib2
    *
-   * @param packageName SP1, HP1, HP2, or HP3
-   * @param hourOffset Hour offset from run initialization (0-24)
+   * Example:
+   * https://object.data.gouv.fr/meteofrance-pnt/pnt/20251015/arome/00H/SP1_arome-france-hd_00H_2025101500.grib2
+   *
+   * @param packageName SP1, SP2, SP3, or HP1
+   * @param hourOffset Hour offset - currently unused as AROME provides single files per run
    * @return Full URL to download
    */
-  def gribUrl(packageName: String, hourOffset: Int): String = {
-    val baseUrl = "https://object.files.data.gouv.fr/meteofrance-pnt/pnt"
-    val hourString = f"${hourOffset}%02dH"
-    val filename = s"arome__${runNumber}__${packageName}__${hourString}__${initTimeString}.grib2"
+  def gribUrl(packageName: String, hourOffset: Int = 0): String = {
+    val baseUrl = "https://object.data.gouv.fr/meteofrance-pnt/pnt"
+    val dateString = f"${initDateTime.getYear}%04d${initDateTime.getMonthValue}%02d${initDateTime.getDayOfMonth}%02d"
+    val runHour = f"${initDateTime.getHour}%02dH"
+    val filename = fileName(packageName, hourOffset)
 
-    s"$baseUrl/$initTimeString/arome/$runNumber/$packageName/$filename"
+    s"$baseUrl/$dateString/arome/$runHour/$filename"
   }
 
   /**
-   * Get all package URLs for a specific hour
-   * @param hourOffset Hour offset from run initialization (0-24)
+   * Get all package URLs for a specific run
+   *
+   * Note: AROME provides single files per run (not per forecast hour)
+   *
    * @return Map of package name -> URL
    */
-  def allPackageUrls(hourOffset: Int): Map[String, String] = {
+  def allPackageUrls(): Map[String, String] = {
     Map(
-      "SP1" -> gribUrl("SP1", hourOffset),
-      "HP1" -> gribUrl("HP1", hourOffset),
-      "HP2" -> gribUrl("HP2", hourOffset),
-      "HP3" -> gribUrl("HP3", hourOffset)
+      "SP1" -> gribUrl("SP1"),
+      "SP2" -> gribUrl("SP2"),
+      "SP3" -> gribUrl("SP3"),
+      "HP1" -> gribUrl("HP1")
     )
   }
 

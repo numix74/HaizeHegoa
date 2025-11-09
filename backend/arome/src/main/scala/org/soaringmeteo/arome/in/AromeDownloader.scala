@@ -11,16 +11,18 @@ import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 /**
- * Utility to download AROME HD 0.01° GRIB2 files from data.gouv.fr
+ * Utility to download AROME France HD (1.3km) GRIB2 files from data.gouv.fr
  *
- * Data source: https://www.data.gouv.fr/fr/datasets/paquets-arome-resolution-0-01deg/
- * Base URL: https://object.files.data.gouv.fr/meteofrance-pnt/pnt/
+ * Data source: https://object.data.gouv.fr/meteofrance-pnt/pnt/
+ * URL format: YYYYMMDD/arome/{HH}H/SP1_arome-france-hd_{HH}H_YYYYMMDDHH.grib2
  *
  * Packages available:
  * - SP1: Surface parameters (temperature, wind at 10m, etc.)
- * - HP1: Height parameters set 1 (wind components at various heights)
- * - HP2: Height parameters set 2 (additional atmospheric variables)
- * - HP3: Height parameters set 3 (more atmospheric variables)
+ * - SP2: Boundary layer (PBLH, CAPE, clouds, terrain)
+ * - SP3: Radiative fluxes (sensible/latent heat, solar radiation)
+ * - HP1: Multi-level winds (20m to 3000m AGL)
+ *
+ * Note: Each GRIB file contains all forecast hours (0-24H) for a given run
  *
  * Downloads are rate-limited to avoid overwhelming the server.
  */
@@ -38,20 +40,18 @@ class AromeDownloader(downloadRateLimit: Int = 60) {
    * Schedule download of a single AROME GRIB2 file
    *
    * @param targetFile Local path where to save the file
-   * @param aromeRun Run metadata (initialization time, run number)
-   * @param packageName Package to download (SP1, HP1, HP2, or HP3)
-   * @param hourOffset Hour offset from run initialization (0-24)
+   * @param aromeRun Run metadata (initialization time)
+   * @param packageName Package to download (SP1, SP2, SP3, or HP1)
    * @return Future containing the path to the downloaded file
    */
   def scheduleDownload(
     targetFile: os.Path,
     aromeRun: AromeRun,
-    packageName: String,
-    hourOffset: Int
+    packageName: String
   ): Future[os.Path] =
     rateLimiter.submit(severalThreads) {
-      logger.debug(s"Downloading AROME $packageName at hour $hourOffset")
-      download(targetFile, aromeRun, packageName, hourOffset)
+      logger.debug(s"Downloading AROME $packageName for run ${aromeRun.initDateTime}")
+      download(targetFile, aromeRun, packageName)
       targetFile
     }
 
@@ -61,10 +61,9 @@ class AromeDownloader(downloadRateLimit: Int = 60) {
   private def download(
     targetFile: os.Path,
     aromeRun: AromeRun,
-    packageName: String,
-    hourOffset: Int
+    packageName: String
   ): Unit = concurrent.blocking {
-    val url = aromeRun.gribUrl(packageName, hourOffset)
+    val url = aromeRun.gribUrl(packageName)
 
     // AROME files are typically available 1-2 hours after run initialization
     // We allow more retries than GFS since the availability window may be tighter
@@ -75,26 +74,24 @@ class AromeDownloader(downloadRateLimit: Int = 60) {
   }
 
   /**
-   * Download all packages for a specific hour
+   * Download all packages for a specific run
    *
    * @param baseDir Base directory where to save files
    * @param aromeRun Run metadata
-   * @param hourOffset Hour offset from run initialization
    * @return Future containing a map of package name -> local file path
    */
   def scheduleDownloadAllPackages(
     baseDir: os.Path,
-    aromeRun: AromeRun,
-    hourOffset: Int
+    aromeRun: AromeRun
   ): Future[Map[String, os.Path]] = {
     import scala.concurrent.ExecutionContext.Implicits.global
 
-    val packageNames = Seq("SP1", "HP1", "HP2", "HP3")
+    val packageNames = Seq("SP1", "SP2", "SP3", "HP1")
     val downloadFutures = packageNames.map { packageName =>
-      val targetFile = baseDir / aromeRun.fileName(packageName, hourOffset)
+      val targetFile = baseDir / aromeRun.fileName(packageName)
       os.makeDir.all(targetFile / os.up)
 
-      scheduleDownload(targetFile, aromeRun, packageName, hourOffset)
+      scheduleDownload(targetFile, aromeRun, packageName)
         .map(path => packageName -> path)
     }
 
@@ -150,10 +147,10 @@ object AromeDownloader {
   /**
    * Test if a specific AROME run is available for download
    */
-  def testRunAvailability(aromeRun: AromeRun, hourOffset: Int = 0): Map[String, Boolean] = {
-    val packages = Seq("SP1", "HP1", "HP2", "HP3")
+  def testRunAvailability(aromeRun: AromeRun): Map[String, Boolean] = {
+    val packages = Seq("SP1", "SP2", "SP3", "HP1")
     packages.map { pkg =>
-      val url = aromeRun.gribUrl(pkg, hourOffset)
+      val url = aromeRun.gribUrl(pkg)
       pkg -> checkUrlAvailability(url)
     }.toMap
   }

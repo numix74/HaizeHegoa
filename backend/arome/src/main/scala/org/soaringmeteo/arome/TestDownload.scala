@@ -56,13 +56,12 @@ object TestDownload {
   }
 
   private def testUrlAvailability(aromeRun: AromeRun): Unit = {
-    val packages = Seq("SP1", "HP1", "HP2", "HP3")
-    val hourOffset = 0
+    val packages = Seq("SP1", "SP2", "SP3", "HP1")
 
-    logger.info(s"Checking availability for hour $hourOffset...")
+    logger.info(s"Checking availability for run ${aromeRun.initDateTime}...")
 
     packages.foreach { pkg =>
-      val url = aromeRun.gribUrl(pkg, hourOffset)
+      val url = aromeRun.gribUrl(pkg)
       val available = AromeDownloader.checkUrlAvailability(url)
 
       val status = if (available) "✓ AVAILABLE" else "✗ NOT AVAILABLE"
@@ -72,23 +71,18 @@ object TestDownload {
   }
 
   private def displaySampleUrls(aromeRun: AromeRun): Unit = {
-    logger.info("Sample URLs for different hours and packages:")
+    logger.info("Sample URLs for all packages:")
 
-    val samples = Seq(
-      ("SP1", 0),
-      ("HP1", 0),
-      ("HP3", 0),
-      ("SP1", 12),
-      ("HP1", 24)
-    )
+    val packages = Seq("SP1", "SP2", "SP3", "HP1")
 
-    samples.foreach { case (pkg, hour) =>
-      val url = aromeRun.gribUrl(pkg, hour)
-      logger.info(s"  $pkg @ H+$hour:")
+    packages.foreach { pkg =>
+      val url = aromeRun.gribUrl(pkg)
+      logger.info(s"  $pkg:")
       logger.info(s"    $url")
     }
 
     logger.info(s"\nStorage path: ${aromeRun.storagePath(os.pwd / "data" / "arome")}")
+    logger.info(s"Filename example: ${aromeRun.fileName("SP1")}")
   }
 
   private def testSingleDownload(aromeRun: AromeRun): Unit = {
@@ -97,13 +91,12 @@ object TestDownload {
     os.makeDir.all(testDir)
 
     val packageName = "SP1"
-    val hourOffset = 0
-    val targetFile = testDir / aromeRun.fileName(packageName, hourOffset)
+    val targetFile = testDir / aromeRun.fileName(packageName)
 
     logger.info(s"Downloading to: $targetFile")
 
     try {
-      val future = downloader.scheduleDownload(targetFile, aromeRun, packageName, hourOffset)
+      val future = downloader.scheduleDownload(targetFile, aromeRun, packageName)
       val result = Await.result(future, 5.minutes)
 
       logger.info(s"✓ Download successful!")
