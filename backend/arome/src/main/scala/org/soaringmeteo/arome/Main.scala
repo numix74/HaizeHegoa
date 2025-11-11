@@ -5,8 +5,8 @@ import scala.concurrent.duration.Duration
 import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 import os.Path
-import org.soaringmeteo.MeteoData
-import org.soaringmeteo.arome.out.Store
+import org.soaringmeteo.{MeteoData, InitDateString}
+import org.soaringmeteo.arome.out.{Store, versionedTargetPath, runTargetPath, zoneTargetPath}
 
 object Main {
   private val logger = LoggerFactory.getLogger(getClass)
@@ -26,6 +26,7 @@ object Main {
 
   def run(settings: Settings): Unit = {
     val initTime = OffsetDateTime.now()
+    val initDateString = InitDateString(initTime)
 
     logger.info("=== AROME Production Pipeline ===")
     logger.info(s"Initialization time: $initTime")
@@ -33,21 +34,21 @@ object Main {
 
     Await.result(Store.ensureSchemaExists(), Duration.Inf)
 
-    // Determine the versioned output directory (e.g., data/7/)
-    val versionedOutputDir = if (settings.zones.nonEmpty) {
-      // Use parent directory of first zone's output
-      val firstZoneOutput = os.Path(settings.zones.head.outputDirectory)
-      firstZoneOutput / os.up
-    } else {
-      throw new Exception("No zones configured")
-    }
-    os.makeDir.all(versionedOutputDir)
+    // Create versioned directory structure (e.g., /path/7/arome/)
+    val baseOutputDir = os.Path(settings.outputBaseDirectory)
+    val versionedOutputDir = versionedTargetPath(baseOutputDir)
+    val runOutputDir = runTargetPath(versionedOutputDir, initDateString)
+    os.makeDir.all(runOutputDir)
+
+    logger.info(s"Output directory: $versionedOutputDir")
+    logger.info(s"Run directory: $runOutputDir")
 
     for (setting <- settings.zones) {
       logger.info(s"\nProcessing zone: ${setting.name}")
-      val outputBaseDir = os.Path(setting.outputDirectory)
-      os.makeDir.all(outputBaseDir)
-      processZone(initTime, setting, outputBaseDir)
+      val zoneId = toZoneId(setting.name)
+      val zoneOutputDir = zoneTargetPath(runOutputDir, zoneId)
+      os.makeDir.all(zoneOutputDir)
+      processZone(initTime, setting, zoneId, zoneOutputDir)
     }
 
     // Generate forecast.json and location forecast files
@@ -58,7 +59,11 @@ object Main {
     logger.info("\n=== AROME Pipeline Complete ===")
   }
 
-  private def processZone(initTime: OffsetDateTime, setting: AromeSetting, outputBaseDir: os.Path): Unit = {
+  private def toZoneId(name: String): String = {
+    name.toLowerCase.replace(" ", "-")
+  }
+
+  private def processZone(initTime: OffsetDateTime, setting: AromeSetting, zoneId: String, zoneOutputDir: os.Path): Unit = {
     val gribDir = os.Path(setting.gribDirectory)
 
     if (!os.exists(gribDir)) {
@@ -125,25 +130,23 @@ object Main {
                 new AromeMeteoDataAdapter(aromeData, initTime.plusHours(hour))
               }
             }
-            val mapsDir = outputBaseDir / "maps" / f"${hour}%02d"
-            os.makeDir.all(mapsDir)
+
             logger.debug(s"    Generating PNG...")
             org.soaringmeteo.out.Raster.writeAllPngFiles(
               setting.zone.longitudes.size,
               setting.zone.latitudes.size,
-              mapsDir,
+              zoneOutputDir,
               hour,
               meteoData
             )
             logger.debug(s"    Generating MVT...")
             org.soaringmeteo.out.VectorTiles.writeAllVectorTiles(
               AromeVectorTilesParameters(setting.zone),
-              mapsDir,
+              zoneOutputDir,
               hour,
               meteoData
             )
             logger.debug(s"    Saving to database...")
-            val zoneId = setting.name.toLowerCase.replace(" ", "-")
             Await.result(
               Store.save(initTime, zoneId, hour, data),
               Duration.Inf
@@ -158,7 +161,7 @@ object Main {
         futures += future
       }
     }
- 
+
     Await.result(Future.sequence(futures), Duration.Inf)
     logger.info(s"Zone ${setting.name} completed")
   }
