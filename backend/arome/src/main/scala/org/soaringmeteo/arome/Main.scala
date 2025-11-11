@@ -33,12 +33,26 @@ object Main {
 
     Await.result(Store.ensureSchemaExists(), Duration.Inf)
 
+    // Determine the versioned output directory (e.g., data/7/)
+    val versionedOutputDir = if (settings.zones.nonEmpty) {
+      // Use parent directory of first zone's output
+      val firstZoneOutput = os.Path(settings.zones.head.outputDirectory)
+      firstZoneOutput / os.up
+    } else {
+      throw new Exception("No zones configured")
+    }
+    os.makeDir.all(versionedOutputDir)
+
     for (setting <- settings.zones) {
       logger.info(s"\nProcessing zone: ${setting.name}")
       val outputBaseDir = os.Path(setting.outputDirectory)
       os.makeDir.all(outputBaseDir)
       processZone(initTime, setting, outputBaseDir)
     }
+
+    // Generate forecast.json and location forecast files
+    logger.info("\nGenerating forecast metadata...")
+    out.JsonWriter.writeJsons(versionedOutputDir, initTime, settings)
 
     Store.close()
     logger.info("\n=== AROME Pipeline Complete ===")
@@ -129,8 +143,9 @@ object Main {
               meteoData
             )
             logger.debug(s"    Saving to database...")
+            val zoneId = setting.name.toLowerCase.replace(" ", "-")
             Await.result(
-              Store.save(initTime, setting.name, hour, data),
+              Store.save(initTime, zoneId, hour, data),
               Duration.Inf
             )
 

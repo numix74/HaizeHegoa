@@ -65,6 +65,32 @@ object Store {
     db.run(action).map(_ == width * height)
   }
 
+  def forecastForLocation(
+    initTime: OffsetDateTime,
+    zone: String,
+    x: Int,
+    y: Int,
+    relevantHours: Set[Int]
+  ): Future[Seq[Json]] = {
+    val action = aromeGrids
+      .filter(g => g.initTime === initTime && g.zone === zone && g.x === x && g.y === y)
+      .sortBy(_.hourOffset)
+      .map(g => (g.hourOffset, g.data))
+      .result
+
+    db.run(action).map { rows =>
+      rows.filter { case (hourOffset, _) => relevantHours.contains(hourOffset) }
+        .map { case (hourOffset, jsonStr) =>
+          parser.parse(jsonStr) match {
+            case Right(json) => json.asObject.map { obj =>
+              Json.fromJsonObject(obj.add("hourOffset", Json.fromInt(hourOffset)))
+            }.getOrElse(json)
+            case Left(_) => Json.Null
+          }
+        }
+    }
+  }
+
   private def encodeAromeData(data: AromeData): Json = {
     Json.obj(
       "t2m" -> Json.fromDoubleOrNull(data.t2m),
