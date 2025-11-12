@@ -32,6 +32,6 @@ object AromeVectorTilesParameters {
         for (latitude <- zone.latitudes) yield
           Point(latitude, longitude)
     
-    VectorTiles.Parameters(extent, 8, zone.longitudes.size, zone.latitudes.size, coordinates)
+    VectorTiles.Parameters(extent, 12, zone.longitudes.size, zone.latitudes.size, coordinates)
   }
 }

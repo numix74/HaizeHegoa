@@ -1,0 +1,46 @@
+# Configuration AROME - Exemple
+# Copier ce fichier vers arome.conf et adapter les chemins selon votre environnement
+
+arome {
+  zones = [
+    {
+      # Identifiant unique de la zone
+      name = "pays_basque"
+
+      # Coordonnées de la zone (WGS84)
+      lon-min = -2.0
+      lon-max = 0.5
+      lat-min = 42.8
+      lat-max = 43.6
+
+      # Résolution (AROME = 0.025° soit ~2.5 km)
+      step = 0.025
+
+      # Répertoire contenant les fichiers GRIB téléchargés
+      grib-directory = "/mnt/soaringmeteo-data/arome/grib/pays_basque"
+
+      # Répertoire de sortie (doit correspondre à la version du format)
+      # Le "7" correspond à la version du format (voir frontend/src/data/ForecastMetadata.ts)
+      output-directory = "/mnt/soaringmeteo-data/arome/output/7"
+    }
+
+    # Vous pouvez ajouter d'autres zones ici
+    # Exemple pour une zone étendue:
+    # {
+    #   name = "pyrenees"
+    #   lon-min = -2.5
+    #   lon-max = 3.0
+    #   lat-min = 42.0
+    #   lat-max = 44.0
+    #   step = 0.025
+    #   grib-directory = "/mnt/soaringmeteo-data/arome/grib/pyrenees"
+    #   output-directory = "/mnt/soaringmeteo-data/arome/output/7"
+    # }
+  ]
+}
+
+# Notes:
+# - Le step doit rester à 0.025 pour AROME (résolution native 2.5 km)
+# - Le output-directory doit se terminer par "/7" pour être compatible avec le frontend
+# - Assurez-vous que les répertoires existent et ont les bonnes permissions
+# - Le pipeline AROME générera automatiquement forecast.json dans output-directory/../

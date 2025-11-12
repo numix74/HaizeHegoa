@@ -33,23 +33,35 @@ object Main {
 
     Await.result(Store.ensureSchemaExists(), Duration.Inf)
 
+    // Track all processed hours across all zones to determine the forecast extent
+    var allProcessedHours = Set.empty[Int]
+
     for (setting <- settings.zones) {
       logger.info(s"\nProcessing zone: ${setting.name}")
       val outputBaseDir = os.Path(setting.outputDirectory)
       os.makeDir.all(outputBaseDir)
-      processZone(initTime, setting, outputBaseDir)
+      val processedHours = processZone(initTime, setting, outputBaseDir)
+      allProcessedHours = allProcessedHours ++ processedHours
+    }
+
+    // Generate forecast.json metadata file
+    if (allProcessedHours.nonEmpty) {
+      val forecastHours = allProcessedHours.toSeq.sorted
+      val versionedTargetDir = os.Path(settings.zones.head.outputDirectory) / ".." / ".."
+      logger.info(s"\nWriting forecast metadata to $versionedTargetDir")
+      JsonWriter.writeJsons(versionedTargetDir, initTime, settings, forecastHours)
     }
 
     Store.close()
     logger.info("\n=== AROME Pipeline Complete ===")
   }
 
-  private def processZone(initTime: OffsetDateTime, setting: AromeSetting, outputBaseDir: os.Path): Unit = {
+  private def processZone(initTime: OffsetDateTime, setting: AromeSetting, outputBaseDir: os.Path): Set[Int] = {
     val gribDir = os.Path(setting.gribDirectory)
 
     if (!os.exists(gribDir)) {
       logger.warn(s"GRIB directory not found: $gribDir")
-      return
+      return Set.empty[Int]
     }
 
     // Définir les groupes de fichiers GRIB
@@ -78,15 +90,15 @@ object Main {
       // Vérifier que tous les fichiers existent
       if (!os.exists(sp1File)) {
         logger.warn(s"Missing file: $sp1File")
-        return
+        return Set.empty[Int]
       }
       if (!os.exists(sp2File)) {
         logger.warn(s"Missing file: $sp2File")
-        return
+        return Set.empty[Int]
       }
       if (!os.exists(sp3File)) {
         logger.warn(s"Missing file: $sp3File")
-        return
+        return Set.empty[Int]
       }
 
       // Traiter chaque heure du groupe
@@ -146,5 +158,8 @@ object Main {
  
     Await.result(Future.sequence(futures), Duration.Inf)
     logger.info(s"Zone ${setting.name} completed")
+
+    // Return all hours that were processed
+    groups.flatMap { case (_, hours) => hours }.toSet
   }
 }
